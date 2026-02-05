@@ -1,6 +1,6 @@
 #include "i8080InstructionData.h"
 
-// ---------- Data definitions (only here, once) ----------
+// ---------- Data definitions ----------
 const std::unordered_map<std::string, Instruction> i8080Instructions = {
     {"NOP",  {1, "00000000"}},
     {"HLT",  {1, "01110110"}},
