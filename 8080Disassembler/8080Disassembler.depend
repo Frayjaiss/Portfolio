@@ -1,0 +1,10 @@
+# depslib dependency file v1.0
+1768318515 source:d:\c++learning\8080disassembler\main.cpp
+	<cstdint>
+	<fstream>
+	<iomanip>
+	<iostream>
+	<iterator>
+	<string>
+	<vector>
+
