@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <cctype>
-#include "8080InstructionData.h"
+#include "i8080InstructionData.h"
 
 //A struct that holds our output file and all information related to that file
 struct AssembledFile{

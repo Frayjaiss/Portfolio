@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_map>
 
-struct I8080InstructionInfo {
+struct Instruction {
     std::string bitPattern;
     uint8_t size;
 };

@@ -1,20 +1,19 @@
-# Code::Blocks
-*.cbp~
-*.depend
+# Code::Blocks generated files
 *.layout
+*.depend
+*.cbp~
 
 # Build artifacts
 *.o
 *.obj
 *.exe
 *.out
-*.a
 
 # Build directories
 bin/
 obj/
 
 # OS / editor junk
+.DS_Store
 *.log
 *.tmp
-.DS_Store
