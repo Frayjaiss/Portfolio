@@ -6,8 +6,8 @@
 #include <unordered_map>
 
 struct Instruction {
-    std::string bitPattern;
     uint8_t size;
+    std::string bitPattern;
 };
 
 enum class Reg : uint8_t {

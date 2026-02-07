@@ -11,6 +11,7 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
+				<Option parameters="Test.txt" />
 				<Compiler>
 					<Add option="-g" />
 				</Compiler>
@@ -32,11 +33,9 @@
 			<Add option="-Wall" />
 			<Add option="-fexceptions" />
 		</Compiler>
-		<Unit filename="i8080InstructionData.cpp">
-			<Option target="&lt;{~None~}&gt;" />
-		</Unit>
+		<Unit filename="i8080InstructionData.cpp" />
 		<Unit filename="i8080InstructionData.h">
-			<Option target="&lt;{~None~}&gt;" />
+			<Option compile="1" />
 		</Unit>
 		<Unit filename="main.cpp" />
 		<Extensions>

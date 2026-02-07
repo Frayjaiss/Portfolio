@@ -32,6 +32,7 @@ struct ParsedLine{
 //some variables for managing the current line were parsing
 std::string label,opcode,argument1,argument2;
 uint8_t instructionSize;
+int operandCount = 0;
 
 ParsedLine(std::string lab, std::string op, std::string a1, std::string a2,uint8_t Is){
     this->label = lab;
@@ -40,6 +41,20 @@ ParsedLine(std::string lab, std::string op, std::string a1, std::string a2,uint8
     this->argument2 = a2;
     this->instructionSize = Is;
 }
+
+void print(){
+    std::cout << this -> opcode << this -> argument1 << this -> argument2;
+}
+
+void set_operand_count(){
+    if(!argument1.empty()){
+        this -> operandCount += 1;
+    }
+    if(!argument2.empty()){
+        this -> operandCount += 1;
+    }
+}
+
 };
 
 void err(std::string msg,int lineNumber){
@@ -90,7 +105,7 @@ uint8_t get_instruction_size(const std::string& instruction){
     if(instructionEntry == i8080Instructions.end()){
         return 0;
     }
-    return instructionEntry -> second;
+    return instructionEntry -> second.size;
 
 }
 
@@ -120,6 +135,7 @@ ParsedLine parse(std::string line,AssembledFile& workingFile){
         line.erase(0, pos + 1);
     } else {
         op = line;
+        line.clear();
         trim(op);
     }
     to_upper(op);
@@ -132,6 +148,7 @@ ParsedLine parse(std::string line,AssembledFile& workingFile){
         line.erase(0, pos + 1);
     } else {
         a1 = line;
+        line.clear();
         trim(a1);
     }
 
@@ -156,6 +173,19 @@ ParsedLine parse(std::string line,AssembledFile& workingFile){
     return ParsedLine(label,op,a1,a2,Size);
 }
 
+bool check_valid_byte(std::string number,int byteSize){
+    int n;
+    size_t pos = 0;
+    try {
+        n = std::stoi(number, &pos, 10);
+    } catch (const std::exception&) {
+        return false;
+    }
+    if (pos != number.size() || n < 0 || n > byteSize) {
+        return false;
+    }
+    return true;
+}
 
 uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
     auto it = i8080Instructions.find(currentLine.opcode);
@@ -184,7 +214,7 @@ uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
                 //mask regCode into our opcode
                 opcode |= static_cast<uint8_t>(reg->second)&0b111;
                 //clear the argument so future steps dont flag this as an argument that should not exist.
-                currentLine.argument1.clear()
+                currentLine.argument1.clear();
                 break;}
             case 'S':{
                     //if no a2, error out
@@ -200,7 +230,7 @@ uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
                     opcode <<= 3;
                     //mask regCode into our opcode
                     opcode |= static_cast<uint8_t>(reg->second)&0b111;
-                    currentLine.argument2.clear()
+                    currentLine.argument2.clear();
                     break;}
             case 'R':{
                      //if no a1, error out
@@ -216,32 +246,69 @@ uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
                     opcode <<= 2;
                     //mask regCode into our opcode
                     opcode |= static_cast<uint8_t>(regp->second)& 0b11;
-                    currentLine.argument1.clear()
+                    currentLine.argument1.clear();
                     break;}
             case 'N':{
                     //if no a1, error out
                     if(currentLine.argument1.empty()){
                         err("Error, mnemonic ["+currentLine.opcode+"] expects an argument.",workingFile.lineNum);
                     }
-                    int n;
-                    size_t pos = 0;
-                    try {
-                        n = std::stoi(currentLine.argument1, &pos, 10);
-                    } catch (const std::exception&) {
-                        err("Error, RST expects a number 0–7.", workingFile.lineNum);
-                    }
-
-                    if (pos != currentLine.argument1.size() || n < 0 || n > 7) {
+                    bool valid_8_bit = check_valid_byte(currentLine.argument1,8);
+                    if(!valid_8_bit){
                         err("Error, RST expects a number 0–7.", workingFile.lineNum);
                     }
                     opcode <<= 3;
-                    opcode |= static_cast<uint8_t>(n)&0b111;
-                    currentLine.argument1.clear()
+                    opcode |= static_cast<uint8_t>(std::stoi(currentLine.argument1))&0b111;
+                    currentLine.argument1.clear();
                     break;
                     }
             }
         }
     return opcode;
+}
+
+std::vector<uint8_t> to_little_endian(uint16_t value){
+    uint8_t high_byte;
+    uint8_t low_byte;
+
+    // Extract the high byte (most significant)
+    // Shift the 16-bit value right by 8 bits (0x1234 -> 0x0012)
+    high_byte = static_cast<uint8_t>(value >> 8);
+
+    // Extract the low byte (least significant)
+    // Use AND mask to get only the rightmost 8 bits (0x1234 & 0x00FF -> 0x0034)
+    low_byte = static_cast<uint8_t>(value & 0xFF);
+
+    std::vector<uint8_t> littleEndian = {low_byte,high_byte};
+    return littleEndian;
+}
+
+//this function will return a vector of 8-bit bytes that can be added to the output vector in the order they are returned
+std::vector<uint8_t> build_operand(ParsedLine& currentLine,AssembledFile& workingFile){
+    //operands are in little endian notation
+    std::vector<uint8_t> operandVector;
+    if(!currentLine.argument1.empty()){
+        //if we find argument1 in our symbol table, then that is the value we want to return
+        auto symbolLookup = workingFile.symbolTable.find(currentLine.argument1);
+        if(symbolLookup != workingFile.symbolTable.end()){
+            operandVector = to_little_endian(symbolLookup -> second);
+        }
+        //if it is not in the symbol table
+        else{
+            //if its a valid 16-bit number then we do exactly what we did with a symbol address.
+            if(check_valid_byte(currentLine.argument1,16)){
+                operandVector = to_little_endian(std::stoi(currentLine.argument1));
+            }
+            //if its a valid 8bit number, then we add it to our
+            else if(check_valid_byte(currentLine.argument1,8)){
+                operandVector.push_back(static_cast<uint8_t>(std::stoi(currentLine.argument1)));
+            }
+            else{
+                err("Unrecognized symbol ["+currentLine.argument1+"]",workingFile.lineNum);
+            }
+        }
+    }
+    return operandVector;
 }
 
 void assemble(AssembledFile& workingFile){
@@ -257,19 +324,41 @@ void assemble(AssembledFile& workingFile){
     PC = 0;
     //PASS 2: Build the output file
     for(; workingFile.lineNum < workingFile.lines.size(); workingFile.lineNum++){
-        ParsedLine currentLineInfo = parse(workingFile.lines[workingFile.lineNum]);
+        ParsedLine currentLineInfo = parse(workingFile.lines[workingFile.lineNum],workingFile);
         uint8_t opcode = build_opcode(currentLineInfo,workingFile);
-        if(currentLineInfo.instructionSize == 1){
-            //if the size is 1, but we have arguments that were not used up in building our opcode, we error out.
-            if(!currentLineInfo.argument1.empty() || !currentLineInfo.argument2.empty()){
-                err("Error, mnemonic ["+currentLineInfo.opcode+"] expects no arguments but was passed 1",workingFile.lineNum);
-            }
-            workingFile.lines.push_back(opcode);
+        //now that we have built the opcode and consumed any arguments that process used, we can count how many operands the user gave the opcode.
+        currentLineInfo.set_operand_count();
+        //check to make sure the user sent the appropriate amount of operands for this opcode
+        //if the size is 1, we should expect no operands left after building the opcode
+        if(currentLineInfo.instructionSize == 1 && currentLineInfo.operandCount != 0){
+            err("Error, mnemonic ["+currentLineInfo.opcode+"] expects 0 operands but was passed "+std::to_string(currentLineInfo.operandCount),workingFile.lineNum);
         }
-
-
+        //if the size is greater than 1, we should expect 1 operand left after building the opcode
+        else if(currentLineInfo.instructionSize > 1 && currentLineInfo.operandCount != 1){
+            err("Error, mnemonic ["+currentLineInfo.opcode+"] expects 1 operands but was passed "+std::to_string(currentLineInfo.operandCount),workingFile.lineNum);
+        }
+        //at this point, we should only have 1 operand that we need to translate. Were going to move it to argument1 if its not there already
+        if(currentLineInfo.argument1.empty()){
+            currentLineInfo.argument1 = currentLineInfo.argument2;
+        }
+        //get the bytes for the operands
+        std::vector<uint8_t> operandBytes = build_operand(currentLineInfo,workingFile);
+        //check for mismatch in operand types (expecting 8 bit or 16 bit)
+        if(currentLineInfo.instructionSize-1 != operandBytes.size()){
+            err("Error, mismatch in operand type and opcode expectation",workingFile.lineNum);
+        }
+        //add the bytes into the output file
+        workingFile.output.push_back(opcode);
+        workingFile.output.insert(workingFile.output.end(),operandBytes.begin(),operandBytes.end());
     }
 
+}
+
+void printBits(uint8_t value) {
+    for (int i = 7; i >= 0; --i) {
+        std::cout << ((value >> i) & 1);
+    }
+    std::cout << '\n';
 }
 
 int main(int argc, char* argv[]){
@@ -298,4 +387,7 @@ int main(int argc, char* argv[]){
     }
     AssembledFile currentFile(lines);
     assemble(currentFile);
+    for(int i = 0; i < currentFile.output.size(); i++){
+        printBits(currentFile.output[i]);
+    }
 }

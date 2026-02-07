@@ -1,0 +1,3 @@
+NOP
+MOV B,A
+PUSH B
