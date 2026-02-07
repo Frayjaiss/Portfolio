@@ -125,7 +125,6 @@ ParsedLine parse(std::string line,AssembledFile& workingFile){
         trim(label);
         line.erase(0, pos + 1);
     }
-
     // OP
     ltrim(line);
     pos = line.find_first_of(" \t");;
@@ -191,7 +190,7 @@ uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
     auto it = i8080Instructions.find(currentLine.opcode);
     //if the current lines opcode is not recognized, then the user input an unrecognized mnemonic and we should exit.
     if(it == i8080Instructions.end()){
-        err("Error, unrecognized mnemonic.",workingFile.lineNum);
+        err("Error, ["+currentLine.opcode+"] is not a recognized mnemonic.",workingFile.lineNum);
     }
     const std::string& bitPattern = it -> second.bitPattern;
     uint8_t opcode = 0;
@@ -314,6 +313,7 @@ std::vector<uint8_t> build_operand(ParsedLine& currentLine,AssembledFile& workin
 void assemble(AssembledFile& workingFile){
     //PASS 1: Linking labels
     uint16_t PC = 0;
+    std::vector<ParsedLine> allLines;
     for(; workingFile.lineNum < workingFile.lines.size();workingFile.lineNum++){
         ParsedLine currentLineInfo = parse(workingFile.lines[workingFile.lineNum],workingFile);
         check_and_add_symbol_reference(currentLineInfo,PC,workingFile);
@@ -325,6 +325,10 @@ void assemble(AssembledFile& workingFile){
     //PASS 2: Build the output file
     for(; workingFile.lineNum < workingFile.lines.size(); workingFile.lineNum++){
         ParsedLine currentLineInfo = parse(workingFile.lines[workingFile.lineNum],workingFile);
+        if(currentLineInfo.opcode.empty()){
+            std::cout << "Warning on line " + std::to_string(workingFile.lineNum+1) + ", no opcode" << std::endl;
+            continue;
+        }
         uint8_t opcode = build_opcode(currentLineInfo,workingFile);
         //now that we have built the opcode and consumed any arguments that process used, we can count how many operands the user gave the opcode.
         currentLineInfo.set_operand_count();
