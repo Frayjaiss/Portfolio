@@ -356,6 +356,10 @@ uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
                     if(!valid_8_bit){
                         err("Error, RST expects a number 0–7.", workingFile.lineNum);
                     }
+                    //its safe to cast this to integer because check_valid_byte already checks to make sure the argument is a valid number
+                    if(std::stoi(currentLine.argument1) > 7 || std::stoi(currentLine.argument1) < 0){
+                        err("Error, RST expects a number 0 to 7.", workingFile.lineNum);
+                    }
                     opcode <<= 3;
                     opcode |= static_cast<uint8_t>(std::stoi(currentLine.argument1))&0b111;
                     currentLine.argument1.clear();
