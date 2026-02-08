@@ -1,6 +1,14 @@
-NOP
-NOP
-NOP
-NOP
-START:
-JMP START
+MVI A,0Ah
+STA 2000h
+LDA 2000h
+ADI 05h
+CMP A
+JZ equal
+MVI B,01h
+JMP end
+
+equal:
+MVI B,02h
+
+end:
+HLT

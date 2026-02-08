@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <cctype>
+#include <type_traits>
 #include "i8080InstructionData.h"
 
 //A struct that holds our output file and all information related to that file
@@ -57,9 +58,121 @@ void set_operand_count(){
 
 };
 
+template <typename T>
+T parse_uint(const std::string& input) {
+    static_assert(
+        std::is_same<T, uint8_t>::value || std::is_same<T, uint16_t>::value,
+        "parseUint only supports uint8_t or uint16_t"
+    );
+
+    // ---- Trim leading and trailing whitespace ----
+    auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
+
+    size_t startIndex = 0;
+    while (startIndex < input.size() && isSpace(input[startIndex])) {
+        startIndex++;
+    }
+
+    size_t endIndex = input.size();
+    while (endIndex > startIndex && isSpace(input[endIndex - 1])) {
+        endIndex--;
+    }
+
+    std::string trimmedInput = input.substr(startIndex, endIndex - startIndex);
+
+    // ---- Determine numeric base ----
+    int numericBase = 10;
+
+    // Binary: 0b1010 or 1010b
+    if (trimmedInput.size() >= 2 &&
+        (trimmedInput.rfind("0b", 0) == 0 || trimmedInput.rfind("0B", 0) == 0)) {
+        numericBase = 2;
+        trimmedInput.erase(0, 2);
+    }
+    else if (!trimmedInput.empty() &&
+             (trimmedInput.back() == 'b' || trimmedInput.back() == 'B')) {
+        numericBase = 2;
+        trimmedInput.pop_back();
+    }
+    // Hexadecimal: 0x1A2F or 1A2Fh
+    else if (trimmedInput.size() >= 2 &&
+             (trimmedInput.rfind("0x", 0) == 0 || trimmedInput.rfind("0X", 0) == 0)) {
+        numericBase = 16;
+        trimmedInput.erase(0, 2);
+    }
+    else if (!trimmedInput.empty() &&
+             (trimmedInput.back() == 'h' || trimmedInput.back() == 'H')) {
+        numericBase = 16;
+        trimmedInput.pop_back();
+    }
+
+    // ---- Convert and truncate to target width ----
+    unsigned long parsedValue = std::stoul(trimmedInput, nullptr, numericBase);
+    return static_cast<T>(parsedValue);
+}
+
 void err(std::string msg,int lineNumber){
-    std::cout << "error on line " << lineNumber << ": "+msg<<std::endl;
+    std::cout << "error on line " << lineNumber+1 << ": "+msg<<std::endl;
     exit(1);
+}
+
+bool check_valid_byte(const std::string& number, int byteSize) {
+    std::string s = number;
+    int base = 10;
+
+    // Detect hex suffix (Intel style)
+    if (!s.empty() && (s.back() == 'h' || s.back() == 'H')) {
+        base = 16;
+        s.pop_back();
+        if (s.empty()) return false;
+    }
+    // Detect hex prefix (C style)
+    else if (s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
+        base = 16;
+        s = s.substr(2);
+        if (s.empty()) return false;
+    }
+
+    int n;
+    size_t pos = 0;
+
+    try {
+        n = std::stoi(s, &pos, base);
+    } catch (const std::exception&) {
+        return false;
+    }
+
+    // Reject partial parses (e.g. "12G", "5abc")
+    if (pos != s.size()) {
+        return false;
+    }
+
+    // Range check
+    int maxValue = (1 << (byteSize * 8)) - 1;
+    if (n < 0 || n > maxValue) {
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<uint8_t> to_little_endian(std::string value,AssembledFile& workingFile){
+    uint8_t high_byte;
+    uint8_t low_byte;
+    if(!check_valid_byte(value,2)){
+        err("value ["+value+"] is not a valid 16bit byte and could not be converted to little endian.",workingFile.lineNum);
+    }
+    uint16_t byte = parse_uint<uint16_t>(value);
+    // Extract the high byte (most significant)
+    // Shift the 16-bit value right by 8 bits (0x1234 -> 0x0012)
+    high_byte = static_cast<uint8_t>(byte >> 8);
+
+    // Extract the low byte (least significant)
+    // Use AND mask to get only the rightmost 8 bits (0x1234 & 0x00FF -> 0x0034)
+    low_byte = static_cast<uint8_t>(byte & 0xFF);
+
+    std::vector<uint8_t> littleEndian = {low_byte,high_byte};
+    return littleEndian;
 }
 
 void to_upper(std::string& str){
@@ -172,19 +285,6 @@ ParsedLine parse(std::string line,AssembledFile& workingFile){
     return ParsedLine(label,op,a1,a2,Size);
 }
 
-bool check_valid_byte(std::string number,int byteSize){
-    int n;
-    size_t pos = 0;
-    try {
-        n = std::stoi(number, &pos, 10);
-    } catch (const std::exception&) {
-        return false;
-    }
-    if (pos != number.size() || n < 0 || n > byteSize) {
-        return false;
-    }
-    return true;
-}
 
 uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
     auto it = i8080Instructions.find(currentLine.opcode);
@@ -252,7 +352,7 @@ uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
                     if(currentLine.argument1.empty()){
                         err("Error, mnemonic ["+currentLine.opcode+"] expects an argument.",workingFile.lineNum);
                     }
-                    bool valid_8_bit = check_valid_byte(currentLine.argument1,8);
+                    bool valid_8_bit = check_valid_byte(currentLine.argument1,1);
                     if(!valid_8_bit){
                         err("Error, RST expects a number 0–7.", workingFile.lineNum);
                     }
@@ -266,22 +366,6 @@ uint8_t build_opcode(ParsedLine& currentLine,AssembledFile& workingFile){
     return opcode;
 }
 
-std::vector<uint8_t> to_little_endian(uint16_t value){
-    uint8_t high_byte;
-    uint8_t low_byte;
-
-    // Extract the high byte (most significant)
-    // Shift the 16-bit value right by 8 bits (0x1234 -> 0x0012)
-    high_byte = static_cast<uint8_t>(value >> 8);
-
-    // Extract the low byte (least significant)
-    // Use AND mask to get only the rightmost 8 bits (0x1234 & 0x00FF -> 0x0034)
-    low_byte = static_cast<uint8_t>(value & 0xFF);
-
-    std::vector<uint8_t> littleEndian = {low_byte,high_byte};
-    return littleEndian;
-}
-
 //this function will return a vector of 8-bit bytes that can be added to the output vector in the order they are returned
 std::vector<uint8_t> build_operand(ParsedLine& currentLine,AssembledFile& workingFile){
     //operands are in little endian notation
@@ -290,17 +374,18 @@ std::vector<uint8_t> build_operand(ParsedLine& currentLine,AssembledFile& workin
         //if we find argument1 in our symbol table, then that is the value we want to return
         auto symbolLookup = workingFile.symbolTable.find(currentLine.argument1);
         if(symbolLookup != workingFile.symbolTable.end()){
-            operandVector = to_little_endian(symbolLookup -> second);
+            operandVector = to_little_endian(std::to_string(symbolLookup -> second),workingFile);
         }
         //if it is not in the symbol table
         else{
-            //if its a valid 16-bit number then we do exactly what we did with a symbol address.
-            if(check_valid_byte(currentLine.argument1,16)){
-                operandVector = to_little_endian(std::stoi(currentLine.argument1));
+            //if its a valid 8bit number, then we add it to our operand vector
+            if(check_valid_byte(currentLine.argument1,1)){
+                uint8_t parsedByte = parse_uint<uint8_t>(currentLine.argument1);
+                operandVector.push_back(parsedByte);
             }
-            //if its a valid 8bit number, then we add it to our
-            else if(check_valid_byte(currentLine.argument1,8)){
-                operandVector.push_back(static_cast<uint8_t>(std::stoi(currentLine.argument1)));
+            //if its a valid 16-bit number then we do exactly what we did with a symbol address.
+            else if(check_valid_byte(currentLine.argument1,2)){
+                operandVector = to_little_endian(currentLine.argument1,workingFile);
             }
             else{
                 err("Unrecognized symbol ["+currentLine.argument1+"]",workingFile.lineNum);
@@ -349,7 +434,7 @@ void assemble(AssembledFile& workingFile){
         std::vector<uint8_t> operandBytes = build_operand(currentLineInfo,workingFile);
         //check for mismatch in operand types (expecting 8 bit or 16 bit)
         if(currentLineInfo.instructionSize-1 != operandBytes.size()){
-            err("Error, mismatch in operand type and opcode expectation",workingFile.lineNum);
+            err("Error, mismatch in operand type and opcode ["+currentLineInfo.opcode+"] expectation",workingFile.lineNum);
         }
         //add the bytes into the output file
         workingFile.output.push_back(opcode);
