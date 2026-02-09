@@ -65,7 +65,7 @@ T parse_uint(const std::string& input) {
         "parseUint only supports uint8_t or uint16_t"
     );
 
-    // ---- Trim leading and trailing whitespace ----
+    //Trim leading and trailing whitespace
     auto isSpace = [](unsigned char c) { return std::isspace(c) != 0; };
 
     size_t startIndex = 0;
@@ -80,7 +80,7 @@ T parse_uint(const std::string& input) {
 
     std::string trimmedInput = input.substr(startIndex, endIndex - startIndex);
 
-    // ---- Determine numeric base ----
+    //Determine numeric base
     int numericBase = 10;
 
     // Binary: 0b1010 or 1010b
@@ -106,7 +106,7 @@ T parse_uint(const std::string& input) {
         trimmedInput.pop_back();
     }
 
-    // ---- Convert and truncate to target width ----
+    //Convert and truncate to target width
     unsigned long parsedValue = std::stoul(trimmedInput, nullptr, numericBase);
     return static_cast<T>(parsedValue);
 }

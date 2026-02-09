@@ -17,3 +17,6 @@ obj/
 .DS_Store
 *.log
 *.tmp
+
+#environments
+.venv
