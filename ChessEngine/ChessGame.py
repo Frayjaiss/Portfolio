@@ -13,32 +13,74 @@ import RenderBoard
 import BoardState
 import ChessPieces
 
-def game_startup(gameScreen,fenString):
+selectedCell = None
+validMoves = []
+
+
+
+def game_startup(gameScreen,board):
     #build the current logical state of our board
-    boardMap = BoardState.build_board_from_fen(fenString)
+    boardMap = board.build_board_from_fen()
     #render the board
     RenderBoard.render_board(gameScreen,boardMap)
     return boardMap
+
+
+#two possibilities for LMB: either we are trying to select a piece or move a piece.
+#the former is true if we selected a cell outside of valid moves and we chose a cell with a piece on it
+#the later is true if we selected a cell inside valid moves
+def left_mouse_button(pos:tuple,board:BoardState.ChessBoard):
+    closestCell = board.find_closest_cell(pos,True)
+    if closestCell == None:
+        pass
+    else:
+        global selectedCell
+        global validMoves
+        activeColor = board.parsedFen.get("ActiveColor")
+        #select a new piece
+        if (not closestCell in validMoves) and (closestCell[2] != None) and (activeColor == closestCell[2].color):
+            selectedCell = closestCell
+            validMoves = closestCell[2].piece_clicked()
+        #move a piece
+        elif (closestCell in validMoves) and (selectedCell != None):
+            selectedCell[2].move_piece(closestCell)
+            selectedCell = None
+            validMoves = []
+            #swap avctive color after a move
+            if activeColor == "White":
+                board.parsedFen["ActiveColor"] = "Black"
+            else:
+                board.parsedFen["ActiveColor"] = "White"
+        #if we reach here, we clicked an empty cell. Reset our trakcing variables.
+        else:
+            selectedCell = None
+            validMoves = []      
+    
+
 
 # pygame setup
 def main():
     running = True
     #get the screen for the game
-    gameScreen = RenderBoard.initial_render()
+    gameScreen = RenderBoard.render_setup()
     #build the starter board
-    fenString = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"
-    boardMap = game_startup(gameScreen,fenString)
+    chessBoard = BoardState.ChessBoard((167,0),60,8,8,"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w")
+    boardMap = game_startup(gameScreen,chessBoard)
     while running:
         event = pygame.event.wait()
         if event.type == pygame.QUIT:
             running = False
             break
-
-        #swapped to event driven loop. when pieces are interactable, event checks will go here.
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            #this function sets the global variables selectedCell and validMoves
+            left_mouse_button(event.pos,chessBoard)
+                
+        #Render any board changes
+        RenderBoard.render_board(gameScreen,boardMap)
+        #draw any new move indicators       
+        RenderBoard.show_move_indicators(gameScreen,validMoves)
 
         pygame.display.flip()
-
-
 
     pygame.quit()
 

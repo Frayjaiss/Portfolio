@@ -3,11 +3,14 @@
 #be responsible for showing valid moves when a piece is clicked on.
 
 import pygame
+moveIndicator = None
 
 #initiates the game and returns the screen to render to.
-def initial_render():
+def render_setup():
+    global moveIndicator
     pygame.init()
     screen = pygame.display.set_mode((853, 480))
+    moveIndicator = pygame.image.load("Assets/MoveIndicator.png").convert_alpha()
     return screen
 
 
@@ -20,3 +23,8 @@ def render_board(screen,boardMap):
             screen.fill(rectInfo[1],rectInfo[0])
             if rectInfo[2] != None:
                 screen.blit(rectInfo[2].asset,rectInfo[0])
+
+def show_move_indicators(screen,moveList):
+    global moveIndicator
+    for move in moveList:
+        screen.blit(moveIndicator,move[0])
